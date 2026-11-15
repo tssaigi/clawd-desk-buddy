@@ -16,7 +16,7 @@ static void render(MiniClawd* m) {
     const uint8_t* src = clawd_frame(a, m->frame);
     for (int gy = 0; gy < a->h; gy++) {
         for (int gx = 0; gx < a->w; gx++) {
-            const uint8_t code = src[gy * a->w + gx];
+            const uint8_t code = src[gy * a->w + (m->mirror ? a->w - 1 - gx : gx)];
             if (!code || code >= CLAWD_PALETTE_SIZE) continue;
             const uint16_t col = a->palette[code];
             for (int dy = 0; dy < c; dy++) {
@@ -70,6 +70,12 @@ void mini_clawd_tick(MiniClawd* m, uint32_t now) {
     uint16_t next = m->frame + 1;
     if (next > m->anim->loop_end || next >= m->anim->frame_count) next = m->anim->loop_start;
     m->frame = next;
+    render(m);
+}
+
+void mini_clawd_set_mirror(MiniClawd* m, bool mirror) {
+    if (m->mirror == mirror) return;
+    m->mirror = mirror;
     render(m);
 }
 

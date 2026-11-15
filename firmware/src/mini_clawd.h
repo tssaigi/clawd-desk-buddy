@@ -15,6 +15,7 @@ struct MiniClawd {
     bool             animate;
     uint16_t         frame;
     uint32_t         frame_at;
+    bool             mirror;   // face left (the art faces right)
 };
 
 // Create the slot (w x h px) on parent; cell is the preferred scale, shrunk
@@ -26,3 +27,4 @@ void mini_clawd_set(MiniClawd* m, const char* anim, bool animate);
 // Advance the animation by its frame holds; call while the slot is visible.
 void mini_clawd_tick(MiniClawd* m, uint32_t now);
 void mini_clawd_free(MiniClawd* m);   // before deleting the parent
+void mini_clawd_set_mirror(MiniClawd* m, bool mirror);

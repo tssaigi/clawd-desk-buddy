@@ -50,7 +50,7 @@
 //   B (middle) → PWR role,  brightness / hold-to-pair (power.cpp)
 //   C (right)  → secondary, HID Shift+Tab (mode toggle)
 // The physical side button stays the PMU's hardware power key (press to
-// turn on, hold about 6 s to turn off); the firmware does not read it.
+// turn on, hold about 4 s to turn off); the firmware does not read it.
 #define TOUCH_STRIP_Y        240
 #define TOUCH_STRIP_Y_MAX    279
 

@@ -248,7 +248,21 @@ bool director_take_dismissed(void) {
 // A tap while he's on the meters: tapping the aquarium always brings the face
 // up (clawd_tap_react). Seated, he hops first (the act opens on its crouch, so
 // he reacts on the next frame); otherwise he heads straight out.
+#define TAP_VISIT_MS 15000               // gesture mode: a tap sends him to a page this long
+
 static void tap_home(int x) {
+    // Gesture mode: a tap startles him off a random edge, to the page on that
+    // side, where you can follow him; he comes back by himself.
+    if (gesture_mode && !minimal && (beat == B_HOME || beat == B_CORNER)) {
+        const int side = clawd_rng_chance(&rng, 50) ? +1 : -1;
+        if (mascot_visit(side, TAP_VISIT_MS, PEEK_LEAVE_PCT)) {
+            react_anim = NULL;
+            go(B_CORNER);
+            Serial.printf("[%lu] director: tap at x %d -> runs off %s\n", (unsigned long)now_ms(), x,
+                          side > 0 ? "right (sessions page)" : "left (colony page)");
+            return;
+        }
+    }
     TapInput in;
     in.on_meters = beat == B_HOME || beat == B_CORNER;
     in.minimal = minimal;
@@ -769,7 +783,7 @@ bool director_face_open(int x) {
     react_anim = NULL;
     peek_x = x;
     peek_face = true;
-    if (!mascot_away()) mascot_leave(PEEK_LEAVE_PCT);
+    mascot_leave(PEEK_LEAVE_PCT);             // out of sight; if he's off on a visit, it ends there
     go(B_PEEK);
     step = 1;                                 // straight to "gone: the face rises"
     return true;
@@ -842,6 +856,13 @@ bool director_debug(const char* name) {
         resume_screensaver = false;
         tap_home(x);
         return beat == B_PEEK;
+    }
+    if (strncmp(name, "visit", 5) == 0) { // a visit now: `clawd visit left|right`
+        if (beat != B_HOME && beat != B_CORNER) return false;
+        const int side = strstr(name, "left") ? -1 : +1;
+        if (!mascot_visit(side, 30000, 150)) return false;
+        go(B_CORNER);
+        return true;
     }
     if (strcmp(name, "lurk") == 0) {      // a lurk trip now (to QA cutting it short)
         if (beat != B_HOME) return false;

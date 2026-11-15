@@ -4,6 +4,7 @@
 #include "clawd_director.h"
 #include "sessions_view.h"
 #include "colony_view.h"
+#include "boot_qr.h"
 
 #define TAP_MAX_PX    14   // movement still counted as a tap
 #define SWIPE_MIN_PX  40   // movement that makes a swipe
@@ -22,6 +23,8 @@ static void on_released(lv_event_t* e) {
     lv_indev_get_point(indev, &end);   // the last pressed point (release keeps it)
     const int dx = end.x - start.x, dy = end.y - start.y;
     const int ax = abs(dx), ay = abs(dy);
+
+    if (boot_qr_visible()) { boot_qr_dismiss(); return; }   // any touch skips the setup QR
 
     if (colony_view_visible()) {
         // Taps and vertical drags belong to the page (blocks, "< All", scrolling);

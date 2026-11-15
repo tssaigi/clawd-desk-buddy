@@ -1,5 +1,8 @@
 # Clawdmeter
 
+> **Setting up a device?** If the user asks you to install, flash or set up this project on an
+> M5Stack Core2 (or received one as a gift), follow [SETUP.md](SETUP.md) step by step.
+
 A desk-side Claude Code usage monitor. ESP32-S3 / ESP32-C6 firmware
 (`firmware/`) shows usage meters and Clawd, Anthropic's pixel mascot; a Rust
 desktop app (`desktop/`) reads usage, follows Claude Code hook events and

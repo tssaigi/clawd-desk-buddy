@@ -1,3 +1,32 @@
+# Clawd desk buddy (M5Stack Core2)
+
+A fork of [Clawdmeter](https://github.com/HermannBjorgvin/Clawdmeter) for the **M5Stack Core2**.
+Clawd sits on your desk, shows your Claude Code usage, and acts out what Claude is doing right now.
+
+- **Usage meters**: session and weekly limits, over Bluetooth from the Clawdmeter desktop app.
+- **Status mirror**: Clawd thinks on a cloud, types on a laptop or searches with a magnifier, in step with your Claude Code session.
+- **Sessions page** (swipe right to left): every live session, what it is doing, how full its context is.
+- **Colony page** (swipe left to right): each session's agents, one Clawd per agent.
+- **Follow Clawd**: when he runs off a side of the screen, swipe that way and he is there.
+- **A printable Clawd body** for the Core2, in [`core2/enclosure`](core2/enclosure).
+- Silent. Nothing leaves your computer.
+
+## Set it up
+
+Got one of these as a gift, or flashing your own Core2? Open this repository with an AI coding
+agent such as Claude Code and say: **"Set this up for me, follow SETUP.md."**
+The guide is [SETUP.md](SETUP.md). It covers flashing, pairing, using your own Claude account,
+the bridge, and how to remove the startup QR code.
+
+A prebuilt firmware image is on the [Releases](https://github.com/tssaigi/clawd-desk-buddy/releases/latest) page.
+
+Unofficial fan project, not affiliated with or endorsed by Anthropic or M5Stack. Tested on macOS with
+a Core2 v1.1. The licensing note at the bottom of this page applies to this fork too.
+
+The original Clawdmeter README follows.
+
+---
+
 # Clawdmeter
 
 ![Two Clawdmeter devices: Clawd's face on the left, session and weekly usage on the right](docs/images/clawdmeter-hero.jpg)

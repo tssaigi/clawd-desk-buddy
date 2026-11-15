@@ -34,7 +34,7 @@ enum Mode {
     M_HELD,       // minimal mode attention: a held pointing frame
     M_SEAT_ATTN,  // attention without the full-size sprite: waving / pointing in his seat
 };
-enum After { AFTER_SEAT, AFTER_AWAY, AFTER_LURK, AFTER_BIG };
+enum After { AFTER_SEAT, AFTER_AWAY, AFTER_LURK, AFTER_BIG, AFTER_VISIT };
 
 static Mode     mode = M_SEATED;
 static const ClawdAnim* anim = NULL;
@@ -56,6 +56,11 @@ static bool     stay_away = false;     // asked to leave mid-lurk: don't walk ba
 static bool     hurry = false;         // cut the lurk short: walk back at HURRY_PCT
 static bool     attn_to_seat = true;   // attention over: the small one walks home (else stays out)
 static uint32_t seated_since = 0;
+// A visit (mascot_visit): he runs off one edge to the page on that side and
+// comes back through the same edge when visit_until passes.
+static int      visit_side = 0;        // -1 left page, +1 right page, 0 not visiting
+static uint32_t visit_ms = 0;          // how long he stays once he's off screen
+static uint32_t visit_until = 0;       // 0 = still on his way out
 static uint32_t idle_gap = 7000;
 static const char* last_act = NULL;
 static int      big_dx = 0;
@@ -64,11 +69,12 @@ static ClawdRng rng;
 
 // Per mood group: how long he sits between acts and which acts he picks.
 // "lurking" = the walk-off / full-size lurk / walk-back trip.
+// "visiting" = off to the page on a random side for a while (mascot_visit).
 static const char* const ACTS_BY_RATE[4][4] = {
-    { "pointing", "lurking", NULL,       NULL      },   // idle: sparse, sneaky
-    { "waving",   "lurking", "pointing", NULL      },   // normal
-    { "waving",   "dancing", "lurking",  NULL      },   // active
-    { "dancing",  "waving",  "dancing",  "lurking" },   // heavy: can't sit still
+    { "pointing", "lurking", "visiting", NULL       },   // idle: sparse, sneaky
+    { "waving",   "lurking", "pointing", "visiting" },   // normal
+    { "waving",   "dancing", "lurking",  "visiting" },   // active
+    { "dancing",  "waving",  "visiting", "lurking"  },   // heavy: can't sit still
 };
 static const uint16_t STILL_MS_BY_RATE[4] = { 10000, 7000, 5000, 3500 };
 static const uint16_t HURRY_PCT = 250;        // hurrying home from a lurk trip
@@ -171,6 +177,7 @@ static void start_frames(const ClawdAnim* a) {
 }
 
 static void walk_to(int target, uint16_t spd, After then) {
+    if (then != AFTER_VISIT) visit_side = 0;   // any other walk ends a visit (none may linger)
     start_frames(walk_anim);
     speed = spd;
     walk_target = target;
@@ -315,7 +322,7 @@ bool mascot_act(const char* name, uint8_t times, bool snappy, uint16_t speed_pct
 
 void mascot_leave(uint16_t spd) {
     if (!img || minimal) return;
-    if (mode == M_AWAY) return;
+    if (mode == M_AWAY) { visit_side = 0; return; }   // the director needs him out: the visit is over, he stays out
     if (mode == M_LURK) {            // finish the peek (no slower than asked), then stay out
         stay_away = true;
         if (spd > speed) speed = spd;
@@ -324,6 +331,7 @@ void mascot_leave(uint16_t spd) {
     if (mode == M_WALK && after != AFTER_SEAT) {
         speed = spd;
         if (after == AFTER_LURK) after = AFTER_AWAY;   // heading out for a lurk: just out
+        if (after == AFTER_VISIT) { after = AFTER_AWAY; visit_side = 0; }   // ...or a visit: just out
         return;
     }
     // Out through the nearest edge (he may be on his way back from the right).
@@ -339,8 +347,30 @@ void mascot_return(int from_side, uint16_t spd) {
     }
     if (mode == M_LURK) { stay_away = false; return; }   // he walks back in after the peek anyway
     if (mode != M_AWAY) return;
+    if (visit_side) { from_side = visit_side; visit_side = 0; }   // back through the edge he left by
     x = from_side > 0 ? off_right_x() : off_left_x();
     walk_to(slot_x, spd, AFTER_SEAT);
+}
+
+bool mascot_visit(int side, uint32_t away_ms, uint16_t spd) {
+    if (!img || minimal || attn) return false;
+    if (mode != M_SEATED && mode != M_ACT) return false;      // only from his seat (an act is cut short)
+    visit_side = side > 0 ? +1 : -1;
+    visit_ms = away_ms;
+    visit_until = 0;
+    last_act = "visiting";
+    walk_to(visit_side > 0 ? off_right_x() : off_left_x(), spd, AFTER_VISIT);
+    return true;
+}
+
+int mascot_cell(void) { return cell; }
+
+int mascot_visit_side(void) { return (mode == M_AWAY) ? visit_side : 0; }
+
+void mascot_visit_extend(uint32_t ms) {
+    if (mode != M_AWAY || !visit_side || !visit_until) return;
+    const uint32_t until = millis() + ms;
+    if ((int32_t)(until - visit_until) > 0) visit_until = until;
 }
 
 bool mascot_lurk(void) {
@@ -369,7 +399,8 @@ bool mascot_hurry_home(void) {
         walk_to(slot_x, HURRY_PCT, AFTER_SEAT);       // heading out: turn around
         return true;
     case M_AWAY:
-        x = off_left_x();
+        x = visit_side > 0 ? off_right_x() : off_left_x();
+        visit_side = 0;
         walk_to(slot_x, HURRY_PCT, AFTER_SEAT);
         return true;
     default:
@@ -379,6 +410,7 @@ bool mascot_hurry_home(void) {
 
 void mascot_place_away(void) {
     if (!img) return;
+    visit_side = 0;
     stay_away = false;
     hurry = false;
     show(img, false);
@@ -389,6 +421,7 @@ void mascot_place_away(void) {
 
 void mascot_reset(void) {
     if (!img) return;
+    visit_side = 0;
     attn = false;
     stay_away = false;
     hurry = false;
@@ -431,6 +464,7 @@ void mascot_attention(bool on, bool to_seat) {
         return;
     }
     if (on) {
+        visit_side = 0;                                            // the alert calls him back
         if (mode == M_AWAY)              big_enter();
         else if (mode == M_LURK)       { show(big_img, false); big_enter(); }
         else if (mode == M_BIG_OUT)      mode = M_BIG_IN;          // was leaving: turn around
@@ -463,6 +497,13 @@ static void seated_tick(uint32_t now) {
         walk_to(off_left_x(), 100, AFTER_LURK);
         return;
     }
+    if (strcmp(act, "visiting") == 0) {
+        // Rarer than the other acts: a visit keeps him off the meters for half a minute.
+        if (!clawd_rng_chance(&rng, 30)) { seated_since = now; return; }
+        const int side = clawd_rng_chance(&rng, 50) ? +1 : -1;
+        if (!mascot_visit(side, clawd_rng_range(&rng, 25000, 45000), 120)) seated_since = now;
+        return;
+    }
     const ClawdAnim* a = clawd_anim(act);
     if (!a) { seated_since = now; return; }
     start_frames(a);
@@ -481,7 +522,15 @@ void mascot_tick(void) {
         seated_tick(now);
         return;
     }
-    if (mode == M_AWAY || mode == M_HELD) return;
+    if (mode == M_AWAY) {
+        if (visit_side && visit_until && (int32_t)(now - visit_until) >= 0) {   // visit over: home
+            x = visit_side > 0 ? off_right_x() : off_left_x();
+            visit_side = 0;
+            walk_to(slot_x, 100, AFTER_SEAT);
+        }
+        return;
+    }
+    if (mode == M_HELD) return;
 
     const ClawdAnim* a = anim;
     if (now - frame_started < clawd_hold(a, frame, speed)) return;
@@ -558,6 +607,7 @@ void mascot_tick(void) {
             mode = M_AWAY;
             if (after == AFTER_LURK) lurk_start();
             else if (after == AFTER_BIG) big_enter();
+            else if (after == AFTER_VISIT) visit_until = millis() + visit_ms;
             return;
         }
     }

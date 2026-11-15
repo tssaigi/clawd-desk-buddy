@@ -6,6 +6,7 @@
 #include "theme.h"
 #include "clawd_anim.h"
 #include "mini_clawd.h"
+#include "visitor.h"
 #include "clawd_director.h"
 #include "hal/board_caps.h"
 
@@ -208,6 +209,7 @@ void sessions_view_init(void) {
     lv_obj_align(note, LV_ALIGN_CENTER, 0, 10);
 
     update_note();
+    visitor_attach(page, +1, screen_w, screen_h);   // Clawd turns up here when he runs off the meters' right edge
 }
 
 static void slide_x(void* obj, int32_t v) { lv_obj_set_x((lv_obj_t*)obj, v); }

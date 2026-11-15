@@ -24,6 +24,8 @@
 #include "gestures.h"
 #include "sessions_view.h"
 #include "colony_view.h"
+#include "visitor.h"
+#include "boot_qr.h"
 
 #include "hal/board_caps.h"
 #include "hal/display_hal.h"
@@ -229,6 +231,15 @@ static void check_serial_cmd() {
             }
             else if (strcmp(cmd_buf, "page sessions") == 0) { sessions_view_show(); Serial.println("{\"page\":\"sessions\"}"); }
             else if (strcmp(cmd_buf, "page meters") == 0)   { sessions_view_hide(); Serial.println("{\"page\":\"meters\"}"); }
+            else if (strcmp(cmd_buf, "bootqr") == 0 || strncmp(cmd_buf, "bootqr ", 7) == 0) {
+                // bootqr | bootqr on | bootqr off | bootqr show   (the startup QR, boot_qr.h)
+                const char* arg = cmd_buf[6] ? cmd_buf + 7 : "";
+                if (strcmp(arg, "on") == 0)        boot_qr_set_enabled(true);
+                else if (strcmp(arg, "off") == 0)  boot_qr_set_enabled(false);
+                else if (strcmp(arg, "show") == 0) boot_qr_show();
+                Serial.printf("{\"bootqr\":%s,\"available\":%s}\n", boot_qr_enabled() ? "true" : "false",
+                              boot_qr_available() ? "true" : "false");
+            }
             else if (strcmp(cmd_buf, "page colony") == 0)   { colony_view_show(); Serial.println("{\"page\":\"colony\"}"); }
             else if (strcmp(cmd_buf, "page home") == 0)     { colony_view_hide(); sessions_view_hide(); Serial.println("{\"page\":\"home\"}"); }
             else if (strcmp(cmd_buf, "col clear") == 0) colony_clear();
@@ -327,6 +338,7 @@ void setup() {
     sessions_view_init();                    // the sessions page, on top of the meters
     colony_view_init();                      // the colony page (agents), left of the meters
     if (board_caps().has_touch) gestures_init();   // swipes: face, sessions page
+    boot_qr_init();                          // the setup QR, on top of everything, for its 30 s
     clawd_prefs_init();  // the saved device settings, before the app says otherwise
 
     Serial.printf("Dashboard ready (%s, %dx%d) %lu ms after boot, waiting for data on BLE...\n",
@@ -411,6 +423,8 @@ void loop() {
     idle_tick();
     sessions_view_tick();
     colony_view_tick();
+    visitor_tick(colony_view_visible(), sessions_view_visible());
+    boot_qr_tick();
     lv_timer_handler();
     ui_tick_anim();
     ble_tick();

@@ -34,7 +34,7 @@ static uint32_t scaled(uint32_t ms, uint16_t pct) { return ms * 100 / (pct ? pct
 
 // ─── Corner + full-size sprite (mascot.h) ───────────────────────────────────
 enum MMode { M_SEATED, M_ACT, M_WALK, M_AWAY, M_LURK, M_BIG_IN, M_BIG_ACT, M_BIG_OUT, M_HELD, M_SEAT_ATTN };
-enum MAfter { A_SEAT, A_AWAY, A_LURK, A_BIG };
+enum MAfter { A_SEAT, A_AWAY, A_LURK, A_BIG, A_VISIT };
 static MMode    m_mode = M_SEATED;
 static MAfter   m_after = A_SEAT;
 static uint32_t m_until = 0;
@@ -42,11 +42,14 @@ static uint32_t m_seated_since = 0;
 static bool     m_autonomy = false, m_minimal = false, m_attn = false;
 static bool     m_stay_away = false, m_to_seat = true, m_act_auto = false;
 static uint32_t m_rng = 12345;
+static int      m_visit_side = 0;
+static uint32_t m_visit_ms = 0, m_visit_until = 0;
 
 static uint32_t m_rand(void) { m_rng ^= m_rng << 13; m_rng ^= m_rng >> 17; m_rng ^= m_rng << 5; return m_rng; }
 
 static void m_seat(void) { m_mode = M_SEATED; m_seated_since = now(); }
 static void m_walk(MAfter then, uint16_t spd) {
+    if (then != A_VISIT) m_visit_side = 0;
     m_mode = M_WALK; m_after = then; m_until = now() + scaled(1500, spd);
 }
 static void m_big_enter(void) {
@@ -78,9 +81,14 @@ bool mascot_act(const char*, uint8_t times, bool, uint16_t speed_pct) {
 }
 
 void mascot_leave(uint16_t spd) {
+    if (m_mode == M_AWAY) m_visit_side = 0;
     if (m_minimal || m_mode == M_AWAY) return;
     if (m_mode == M_LURK) { m_stay_away = true; return; }
-    if (m_mode == M_WALK && m_after != A_SEAT) { if (m_after == A_LURK) m_after = A_AWAY; return; }
+    if (m_mode == M_WALK && m_after != A_SEAT) {
+        if (m_after == A_LURK || m_after == A_VISIT) m_after = A_AWAY;
+        m_visit_side = 0;
+        return;
+    }
     m_walk(A_AWAY, spd);
 }
 
@@ -88,8 +96,19 @@ void mascot_return(int, uint16_t spd) {
     if (m_mode == M_WALK && m_after != A_SEAT) { m_walk(A_SEAT, spd); return; }
     if (m_mode == M_LURK) { m_stay_away = false; return; }
     if (m_mode != M_AWAY) return;
+    m_visit_side = 0;
     m_walk(A_SEAT, spd);
 }
+
+bool mascot_visit(int side, uint32_t away_ms, uint16_t spd) {
+    if (m_minimal || m_attn || (m_mode != M_SEATED && m_mode != M_ACT)) return false;
+    m_visit_side = side > 0 ? 1 : -1;
+    m_visit_ms = away_ms;
+    m_walk(A_VISIT, spd);
+    return true;
+}
+int  mascot_visit_side(void) { return m_mode == M_AWAY ? m_visit_side : 0; }
+void mascot_visit_extend(uint32_t) {}
 
 bool mascot_lurk(void) {
     if (m_minimal || !world.has_big || m_mode != M_SEATED) return false;
@@ -106,16 +125,17 @@ bool mascot_hurry_home(void) {
         if (m_after == A_BIG) return false;
         if (m_after != A_SEAT) m_walk(A_SEAT, 250);
         return true;
-    case M_AWAY: m_walk(A_SEAT, 250); return true;
+    case M_AWAY: m_visit_side = 0; m_walk(A_SEAT, 250); return true;
     default: return false;
     }
 }
 
-void mascot_place_away(void) { m_stay_away = false; m_mode = M_AWAY; }
-void mascot_reset(void) { m_attn = false; m_stay_away = false; m_seat(); }
+void mascot_place_away(void) { m_visit_side = 0; m_stay_away = false; m_mode = M_AWAY; }
+void mascot_reset(void) { m_visit_side = 0; m_attn = false; m_stay_away = false; m_seat(); }
 void mascot_set_minimal(bool on) { m_minimal = on; mascot_reset(); }
 
 void mascot_attention(bool on, bool to_seat) {
+    if (on) m_visit_side = 0;
     if (on == m_attn) return;
     m_attn = on;
     m_to_seat = on || to_seat;
@@ -159,12 +179,16 @@ void mascot_tick(void) {
         if (m_after == A_SEAT) { m_seat(); return; }
         m_mode = M_AWAY;
         if (m_after == A_LURK) { m_mode = M_LURK; m_until = now() + 3000; }
+        else if (m_after == A_VISIT) m_visit_until = now() + m_visit_ms;
         else if (m_after == A_BIG) m_big_enter();
         return;
     case M_LURK:
         if (!done(m_until)) return;
         if (m_stay_away) { m_stay_away = false; m_mode = M_AWAY; return; }
         m_walk(A_SEAT, 100);
+        return;
+    case M_AWAY:
+        if (m_visit_side && done(m_visit_until)) { m_visit_side = 0; m_walk(A_SEAT, 100); }
         return;
     case M_BIG_IN:
         if (done(m_until)) m_mode = M_BIG_ACT;

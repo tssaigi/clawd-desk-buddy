@@ -42,6 +42,15 @@ void mascot_return(int from_side, uint16_t speed_pct); // -1 left / +1 right edg
 // attention Clawd owns him.
 bool mascot_hurry_home(void);
 bool mascot_lurk(void);              // QA: start a lurk trip now (seated, PSRAM only)
+// A visit: he runs off the `side` edge (-1 left, +1 right) to the page on
+// that side (colony / sessions) and stays there `away_ms` once off screen,
+// then walks back in through the same edge. From his seat or an act only.
+// Any director command that moves him (return, hurry home, leave, attention,
+// reset) ends the visit.
+bool mascot_visit(int side, uint32_t away_ms, uint16_t speed_pct);
+int  mascot_visit_side(void);        // the page he's on right now: -1 / +1, 0 = not visiting (or still on his way)
+void mascot_visit_extend(uint32_t ms);   // you followed him: stay at least ms longer
+int  mascot_cell(void);              // the corner Clawd's px per art cell (the visitor matches it)
 void mascot_place_away(void);        // off screen now (a curtain is covering)
 void mascot_reset(void);             // seated now, nothing pending
 
