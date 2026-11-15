@@ -350,6 +350,24 @@ a board capability, with no NVS override, desktop setting, or serial toggle.
   is a wave and point in his seat (he walks back to it first if he's out),
   for the attention animation's time.
 
+## Status mirror
+
+`status <state>` on the serial console (`director_status`) mirrors what
+Claude is doing, for a host bridge that watches the live Claude Code
+transcripts. state = thinking | coding | reading | searching | delegating |
+asking | done | idle maps to the official scenes cloud, laptop, magnifier,
+magnifier, pointing, waving and jumping happy; idle sends him back to his seat.
+
+- The `status` beat: from home he steps out of his seat, walks on full size
+  and performs the scene in `STATUS_LOOP_MS` rounds, switching scenes in place
+  when the state changes. Without the performer (no PSRAM) it is a corner act.
+- The bridge repeats the state; with no update for `STATUS_TTL_MS` (60 s) the
+  mirror lapses. While it is live the director's own shows stay off, so a
+  performance always means "this is what Claude is doing".
+- Attention outranks it (the alert interrupts as it does a show); a tap runs
+  him home like any performance and holds the meters for `STATUS_TAP_HOLD_MS`.
+- `test_director`'s fuzz drives it too, under the one-Clawd rule.
+
 ## Buttons
 
 - BOOT (Space) and SECONDARY (Shift+Tab): unchanged. They also count as

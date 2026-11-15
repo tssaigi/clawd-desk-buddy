@@ -228,6 +228,17 @@ pub const BOARDS: [BoardInfo; 25] = [
         pwr_button: true,
     },
     BoardInfo {
+        env: "m5stack_core2",
+        name: "M5Stack Core2",
+        product: "M5Stack Core2 ESP32 IoT Development Kit",
+        width: 320,
+        height: 240,
+        buy_url: "https://shop.m5stack.com/products/m5stack-core2-esp32-iot-development-kit",
+        summary: "320×240 · touch · A/B/C touch keys",
+        chip: "ESP32",
+        pwr_button: true,
+    },
+    BoardInfo {
         env: "m5sticks3",
         name: "M5StickS3",
         product: "M5Stack M5StickS3",

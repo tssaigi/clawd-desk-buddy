@@ -29,9 +29,10 @@ enum Beat {
     B_RUN_HOME,      // the performance stops, he runs off, the corner walks home
     B_ATTENTION,     // the big Clawd fetches you
     B_PEEK,          // a tap on the meters: hop, duck out, the face comes up curious for a while
+    B_STATUS,        // mirror: he performs what Claude is doing right now (director_status)
 };
 static const char* const BEAT_NAMES[] = {
-    "home", "corner", "show", "screensaver", "face-home", "run-home", "attention", "peek",
+    "home", "corner", "show", "screensaver", "face-home", "run-home", "attention", "peek", "status",
 };
 
 static Beat     beat = B_HOME;
@@ -73,6 +74,26 @@ static ClawdRng    rng;
 static int         peek_x = 0;                // where the peek's tap landed
 static uint32_t    peek_up_at = 0;            // the peek's face started rising
 static lv_indev_t* touch_indev = NULL;
+
+// Status mirror (director_status): what Claude is doing, as one of the
+// official scenes. A host bridge repeats the state every few seconds; when it
+// stops, the mirror lapses and the director is back to its own beats.
+#define STATUS_TTL_MS       60000   // a mirror with no update for this long has lapsed
+#define STATUS_LOOP_MS       6000   // each performance of the state's scene
+#define STATUS_TAP_HOLD_MS  15000   // a tap shows the meters for this long
+static const char* status_name = NULL;    // scene for the current state, NULL = idle
+static int         status_anim = -1;      // its index, -1 = idle
+
+// Gesture mode (director_set_gesture_mode): touch comes from gestures.cpp
+// instead of the raw press below, the face only rises on a swipe up, and the
+// screensaver (which is the face) never starts.
+static bool        gesture_mode = false;
+static bool        peek_face = true;        // this peek brings the face up (false: he just runs off)
+static uint32_t    peek_away_at = 0;        // a faceless peek: when he got out of sight
+#define PEEK_AWAY_MS 2500                   // how long he stays out before walking back
+static int         status_shown = -1;     // the scene the performer is on
+static uint32_t    status_seen = 0;       // last update (0 = never)
+static uint32_t    status_hold_until = 0; // meters held after a tap
 
 static uint32_t now_ms(void) { return millis(); }
 
@@ -116,7 +137,7 @@ static void arrive_meters(void) {
     if (attention_on) { go(B_ATTENTION); return; }
     if (resume_screensaver) {
         resume_screensaver = false;
-        if (!minimal && ui_meters_live()) { go(B_SCREENSAVER); return; }
+        if (!minimal && !gesture_mode && ui_meters_live()) { go(B_SCREENSAVER); return; }
     }
     mascot_return(-1, 150);
     go(B_CORNER);
@@ -145,7 +166,7 @@ static void to_meters(bool noticed) {
         go(B_FACE_HOME);
     } else if (performing) {
         go(B_RUN_HOME);
-    } else if (beat == B_SHOW || beat == B_SCREENSAVER) {
+    } else if (beat == B_SHOW || beat == B_SCREENSAVER || beat == B_STATUS) {
         // Still on the meters (pointing / walking off): turn around.
         if (attention_on) { go(B_ATTENTION); return; }
         mascot_return(-1, 150);
@@ -234,6 +255,7 @@ static void tap_home(int x) {
     in.corner = mascot_free() ? CORNER_FREE : mascot_out() ? CORNER_OUT : CORNER_BUSY;
     TapReact r = clawd_tap_react(&in);
     if (r == TAP_PEEK_HOP && !mascot_act("jumping", 1, true, PEEK_HOP_PCT)) r = TAP_PEEK;
+    peek_face = !gesture_mode;                // gesture mode: a tap only startles him off
     if (r == TAP_PEEK) mascot_leave(PEEK_LEAVE_PCT);
     if (r != TAP_NONE) {
         react_anim = NULL;               // he's off to the glass; a queued corner reaction is moot
@@ -254,6 +276,7 @@ void director_tap(int x) {
         tap_home(x);
         return;
     }
+    if (beat == B_STATUS) status_hold_until = now_ms() + STATUS_TAP_HOLD_MS;
     if (beat == B_PEEK) {
         // The face is up (or coming up) looking at you: he blinks and drops
         // right away. Before it shows (hop, ducking out) the tap is
@@ -295,6 +318,7 @@ void director_set_liveliness(int level) {
 
 static void indev_cb(lv_event_t* e) {
     (void)e;
+    if (gesture_mode) return;                 // gestures.cpp sends taps on release
     lv_point_t p = { 0, 0 };
     if (touch_indev) lv_indev_get_point(touch_indev, &p);
     director_tap(p.x);
@@ -572,7 +596,7 @@ static void run_attention(uint32_t now) {
     if (mascot_in_attention() || mascot_busy()) return;
     if (resume_screensaver) {
         resume_screensaver = false;
-        if (!minimal && ui_meters_live()) { go(B_SCREENSAVER); return; }
+        if (!minimal && !gesture_mode && ui_meters_live()) { go(B_SCREENSAVER); return; }
     }
     if (mascot_away()) {              // was told to stay out, then you showed up
         mascot_return(-1, 150);
@@ -598,6 +622,11 @@ static void run_peek(uint32_t now) {
         break;
     case 1:  // gone: the face rises, curious about the tap
         if (!mascot_away()) return;
+        if (!peek_face) {                     // gesture mode: no face, he just comes back
+            peek_away_at = now;
+            step = 10;
+            return;
+        }
         face_rise_toward(peek_x);
         peek_up_at = now;
         next_step();
@@ -614,6 +643,11 @@ static void run_peek(uint32_t now) {
         if (face_busy()) return;
         face_set_resting(true);
         next_step();
+        break;
+    case 10:  // faceless peek: out of sight for a moment, then he walks back
+        if ((uint32_t)(now - peek_away_at) < PEEK_AWAY_MS) return;
+        mascot_return(-1, 150);
+        go(B_CORNER);
         break;
     default:  // curious for a while, then back to his seat on his own
         if (peek_hold(peek_up_at, now, &t) == PEEK_HOLD_DONE) {
@@ -638,18 +672,129 @@ static void run_corner(uint32_t now) {
     if (settled(now)) go(B_HOME);
 }
 
+static bool status_live(uint32_t now) {
+    return status_seen != 0 && (uint32_t)(now - status_seen) < STATUS_TTL_MS;
+}
+
+static bool status_wants_stage(uint32_t now) {
+    return status_anim >= 0 && status_live(now) && (int32_t)(now - status_hold_until) >= 0;
+}
+
 static void run_home(uint32_t now) {
     if (minimal) return;
     if (idle_is_asleep()) return;                 // nobody's looking
+    if (status_wants_stage(now)) { go(B_STATUS); return; }
     if (joy_pending) {
         if ((uint32_t)(now - joy_at) > clawd_tuning().joy_pending_ms) joy_pending = false;
         else if (mascot_act("jumping happy", 2)) { joy_pending = false; go(B_CORNER); return; }
     }
     const bool live = ui_meters_live();
     QuietInput q = { now, last_engagement, signals_hooks_seen(), window_not_started, live };
-    if (screensaver_ready(&q, &clawd_tuning())) { go(B_SCREENSAVER); return; }
-    if (live && signals_hooks_seen() && show_gate_ready(&show_gate, now, &clawd_tuning()))
+    if (!gesture_mode && screensaver_ready(&q, &clawd_tuning())) { go(B_SCREENSAVER); return; }
+    // While the mirror is live his performances mean "this is what Claude is
+    // doing", so the director's own shows stay off.
+    if (live && signals_hooks_seen() && !status_live(now) &&
+        show_gate_ready(&show_gate, now, &clawd_tuning()))
         go(B_SHOW);
+}
+
+// ─── Status mirror ───────────────────────────────────────────────────────────
+// He steps out of his seat, walks on full size and performs the state's
+// scene, switching scenes in place as the state changes. Idle (or a lapsed
+// mirror) sends him off and back to his seat. Without the performer (no
+// PSRAM) the scene plays as a corner act instead.
+static void run_status(uint32_t now) {
+    const bool want = status_wants_stage(now);
+    if (!performer_available()) {
+        if (!want) { go(B_HOME); return; }
+        if (!mascot_acting() && mascot_free()) mascot_act(status_name, 1);
+        return;
+    }
+    switch (step) {
+    case 0:
+        if (!want) { go(B_HOME); return; }
+        if (performing) { step = 3; status_shown = -1; return; }
+        if (mascot_acting()) return;
+        mascot_leave(150);
+        next_step();
+        break;
+    case 1:
+        if (!mascot_away()) return;
+        perform_enter(150);
+        next_step();
+        break;
+    case 2:
+        if (!settled(now)) return;
+        status_shown = -1;
+        next_step();
+        break;
+    case 3:
+        if (!want) {
+            performer_release();
+            performer_walk_off(PERFORMER_LEFT, 150);
+            next_step();
+            return;
+        }
+        if (status_anim != status_shown) {
+            performer_release();
+            performer_perform(status_anim, STATUS_LOOP_MS);
+            status_shown = status_anim;
+        } else if (!performer_busy()) {
+            performer_perform(status_anim, STATUS_LOOP_MS);
+        }
+        break;
+    default:
+        if (performer_visible()) return;
+        performing = false;
+        mascot_return(-1, 100);
+        go(B_CORNER);
+        break;
+    }
+}
+
+void director_set_gesture_mode(bool on) {
+    gesture_mode = on;
+    if (on && beat == B_SCREENSAVER) to_meters(false);
+}
+
+bool director_face_open(int x) {
+    engage();
+    if (attention_on || minimal) return false;
+    if (face_visible()) return false;
+    if (beat == B_STATUS) status_hold_until = now_ms() + STATUS_TAP_HOLD_MS;
+    if (beat != B_HOME && beat != B_CORNER) {
+        to_meters(false);                     // a performance runs home first; swipe again
+        return false;
+    }
+    react_anim = NULL;
+    peek_x = x;
+    peek_face = true;
+    if (!mascot_away()) mascot_leave(PEEK_LEAVE_PCT);
+    go(B_PEEK);
+    step = 1;                                 // straight to "gone: the face rises"
+    return true;
+}
+
+bool director_status(const char* state) {
+    static const struct { const char* state; const char* anim; } MAP[] = {
+        { "thinking",   "cloud" },
+        { "coding",     "laptop" },
+        { "reading",    "magnifier" },
+        { "searching",  "magnifier" },
+        { "delegating", "pointing" },
+        { "asking",     "waving" },
+        { "done",       "jumping happy" },
+        { "idle",       NULL },
+    };
+    for (const auto& m : MAP) {
+        if (strcmp(state, m.state) != 0) continue;
+        status_seen = now_ms();
+        if (!status_seen) status_seen = 1;
+        status_name = m.anim;
+        status_anim = m.anim ? clawd_anim_index(m.anim) : -1;
+        return true;
+    }
+    return false;
 }
 
 void director_tick(void) {
@@ -669,6 +814,7 @@ void director_tick(void) {
     case B_RUN_HOME:    run_run_home(now); break;
     case B_ATTENTION:   run_attention(now); break;
     case B_PEEK:        run_peek(now); break;
+    case B_STATUS:      run_status(now); break;
     }
 }
 
@@ -703,6 +849,7 @@ bool director_debug(const char* name) {
     }
     const bool show = strcmp(name, "show") == 0;
     if (!show && strcmp(name, "screensaver") != 0) return false;
+    if (!show && gesture_mode) return false;   // the screensaver is the face: swipe up only
     if (beat != B_HOME) return false;     // finish the current beat first (`clawd home`)
     go(show ? B_SHOW : B_SCREENSAVER);
     return true;

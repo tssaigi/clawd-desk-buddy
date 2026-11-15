@@ -13,8 +13,18 @@ static bool     broke = false;
 static uint32_t broke_at = 0;
 static char     broke_what[96];
 
+static bool fuzz_gestures_on = false;   // mirrors fuzz_gestures for the per-frame check
+static bool face_opened = false;        // a swipe up raised the face and it hasn't gone yet
+
 static void check_one_clawd(void) {
     const OnScreen s = fake_on_screen();
+    if (!s.face && beat != B_PEEK) face_opened = false;   // the swipe's peek is over
+    if (!broke && fuzz_gestures_on && s.face && !face_opened) {
+        broke = true;
+        broke_at = fake_now_ms;
+        snprintf(broke_what, sizeof(broke_what), "face up without a swipe, beat %s:%u", director_beat_name(), step);
+        return;
+    }
     if (broke || fake_clawds(s) <= 1) return;
     broke = true;
     broke_at = fake_now_ms;
@@ -99,6 +109,10 @@ static uint32_t fz_range(uint32_t lo, uint32_t hi) { return lo + fz_next() % (hi
 // pending (this file includes the director, so its statics are in reach).
 static void fresh_director(void) {
     attention_on = false;
+    status_seen = 0;
+    status_anim = -1;
+    status_name = NULL;
+    status_hold_until = 0;
     resume_screensaver = false;
     react_anim = NULL;
     joy_pending = false;
@@ -116,11 +130,15 @@ static void fresh_director(void) {
 }
 
 static int fuzz_level = CLAWD_LIVELINESS_DEFAULT;
+static bool fuzz_gestures = false;   // gesture mode: taps on release, the face only on a swipe up
 
 static void fuzz(uint32_t seed, uint32_t total_ms, bool has_big) {
     fz = seed;
     world.has_big = has_big;
     fresh_director();
+    director_set_gesture_mode(fuzz_gestures);
+    fuzz_gestures_on = fuzz_gestures;
+    face_opened = false;
     director_set_liveliness(fuzz_level);
     float pct = 10;
     uint32_t es = 0;
@@ -130,7 +148,7 @@ static void fuzz(uint32_t seed, uint32_t total_ms, bool has_big) {
         t += gap;
         UsageData d = live_payload();
         SignalsUpdate sig = no_signal();
-        switch (fz_next() % 16) {
+        switch (fz_next() % 19) {
         case 0: case 1:  world.activity = (int)fz_range(0, 3); break;
         case 2:          world.activity = 3; break;
         case 3: case 4:  sig.event_fired = true; sig.event = "psb"[fz_next() % 3]; sig.event_seq = ++es; break;
@@ -147,6 +165,12 @@ static void fuzz(uint32_t seed, uint32_t total_ms, bool has_big) {
             continue;
         }
         case 14:         director_set_liveliness((int)fz_range(1, 5)); continue;
+        case 15: case 16: {                       // the status mirror (a host bridge)
+            static const char* const STATES[] = { "thinking", "coding", "reading", "done", "idle", "idle" };
+            director_status(STATES[fz_next() % 6]);
+            continue;
+        }
+        case 17:         if (director_face_open((int)fz_range(0, 479))) face_opened = true; continue;   // a swipe up
         default:         break;                   // a quiet stretch
         }
         d.session_pct = pct;
@@ -170,6 +194,18 @@ static void test_fuzz_one_clawd_with_full_size_sprite(void) {
     memset(seen, 0, sizeof(seen));
     for (uint32_t seed = 1; seed <= 40 && !broke; seed++) fuzz(seed * 2654435761u, 30 * 60 * 1000, true);
     assert_every_beat_seen(true);
+}
+
+static void test_fuzz_one_clawd_in_gesture_mode(void) {
+    fuzz_gestures = true;
+    for (uint32_t seed = 1; seed <= 25 && !broke; seed++) {
+        fuzz(seed * 2246822519u, 20 * 60 * 1000, true);
+        fuzz(seed * 3266489917u, 20 * 60 * 1000, false);
+    }
+    fuzz_gestures = false;               // before the assert: a failure must not leak gesture mode
+    fuzz_gestures_on = false;
+    director_set_gesture_mode(false);
+    assert_one_clawd();
 }
 
 static void test_fuzz_one_clawd_without_full_size_sprite(void) {
@@ -338,6 +374,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_screensaver_calm_dip_keeps_one_clawd);
     RUN_TEST(test_fuzz_one_clawd_with_full_size_sprite);
+    RUN_TEST(test_fuzz_one_clawd_in_gesture_mode);
     RUN_TEST(test_fuzz_one_clawd_without_full_size_sprite);
     RUN_TEST(test_no_nonsense_sits_still_through_everything_but_taps);
     RUN_TEST(test_no_nonsense_ends_a_running_show);

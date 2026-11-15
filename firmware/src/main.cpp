@@ -21,6 +21,9 @@
 #include "clawd_prefs.h"
 #include "perf.h"
 #include "pair_hold.h"
+#include "gestures.h"
+#include "sessions_view.h"
+#include "colony_view.h"
 
 #include "hal/board_caps.h"
 #include "hal/display_hal.h"
@@ -133,7 +136,7 @@ static void clear_pairing(const char* why) {
 }
 
 // ---- Serial command buffer ----
-#define CMD_BUF_SIZE 64
+#define CMD_BUF_SIZE 128   // `sess add` lines carry a session title
 static char cmd_buf[CMD_BUF_SIZE];
 static int cmd_pos = 0;
 
@@ -224,6 +227,40 @@ static void check_serial_cmd() {
                 if (cmd_buf[11] == ' ') pace_marker_set(atoi(cmd_buf + 12) != 0);
                 Serial.printf("{\"pace_marker\":%s}\n", pace_marker_get() ? "true" : "false");
             }
+            else if (strcmp(cmd_buf, "page sessions") == 0) { sessions_view_show(); Serial.println("{\"page\":\"sessions\"}"); }
+            else if (strcmp(cmd_buf, "page meters") == 0)   { sessions_view_hide(); Serial.println("{\"page\":\"meters\"}"); }
+            else if (strcmp(cmd_buf, "page colony") == 0)   { colony_view_show(); Serial.println("{\"page\":\"colony\"}"); }
+            else if (strcmp(cmd_buf, "page home") == 0)     { colony_view_hide(); sessions_view_hide(); Serial.println("{\"page\":\"home\"}"); }
+            else if (strcmp(cmd_buf, "col clear") == 0) colony_clear();
+            else if (strcmp(cmd_buf, "col done") == 0)  colony_commit();
+            else if (strncmp(cmd_buf, "col open ", 9) == 0) colony_open(cmd_buf + 9);
+            else if (strncmp(cmd_buf, "col s ", 6) == 0) {
+                // col s <sid> <working 0|1> <title...>
+                char sid[16] = "";
+                int working = 0, used = 0;
+                if (sscanf(cmd_buf + 6, "%15s %d %n", sid, &working, &used) >= 2)
+                    colony_add_session(sid, working != 0, cmd_buf + 6 + used);
+            }
+            else if (strncmp(cmd_buf, "col a ", 6) == 0) {
+                // col a <sid> <state> <name...>
+                char sid[16] = "", state[16] = "";
+                int used = 0;
+                if (sscanf(cmd_buf + 6, "%15s %15s %n", sid, state, &used) >= 2)
+                    colony_add_agent(sid, state, cmd_buf + 6 + used);
+            }
+            else if (strcmp(cmd_buf, "sess clear") == 0) sessions_clear();
+            else if (strcmp(cmd_buf, "sess done") == 0)  sessions_commit();
+            else if (strncmp(cmd_buf, "sess add ", 9) == 0) {
+                // sess add <state> <ctx%> <title...>
+                char state[16] = "";
+                int ctx = -1, used = 0;
+                if (sscanf(cmd_buf + 9, "%15s %d %n", state, &ctx, &used) >= 2)
+                    sessions_add(state, ctx, cmd_buf + 9 + used);
+            }
+            else if (strncmp(cmd_buf, "status ", 7) == 0) {
+                const bool ok = director_status(cmd_buf + 7);
+                Serial.printf("{\"status\":\"%s\",\"ok\":%s}\n", cmd_buf + 7, ok ? "true" : "false");
+            }
             else if (strncmp(cmd_buf, "clawd ", 6) == 0) {
                 const bool ok = director_debug(cmd_buf + 6);
                 Serial.printf("{\"clawd\":\"%s\",\"ok\":%s}\n", cmd_buf + 6, ok ? "true" : "false");
@@ -287,6 +324,9 @@ void setup() {
     ui_update_ble_status(ble_get_state(), ble_get_device_name(), ble_get_mac_address());
     ui_update_battery(power_hal_battery_pct(), power_hal_is_charging(), power_hal_is_vbus_in());
     director_init();    // rooms + beats; boots on the meters (home)
+    sessions_view_init();                    // the sessions page, on top of the meters
+    colony_view_init();                      // the colony page (agents), left of the meters
+    if (board_caps().has_touch) gestures_init();   // swipes: face, sessions page
     clawd_prefs_init();  // the saved device settings, before the app says otherwise
 
     Serial.printf("Dashboard ready (%s, %dx%d) %lu ms after boot, waiting for data on BLE...\n",
@@ -369,6 +409,8 @@ static void touch_pair_tick(void) {
 
 void loop() {
     idle_tick();
+    sessions_view_tick();
+    colony_view_tick();
     lv_timer_handler();
     ui_tick_anim();
     ble_tick();

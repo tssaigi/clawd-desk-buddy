@@ -346,6 +346,7 @@ static void apply_pair_text(void) {
     if (!pwr && pair_hint == PAIR_HINT_HOLDING) note = PAIR_TEXT_HOLDING;
     else if (!pwr && pair_hint == PAIR_HINT_CLEARED) lines = PAIR_TEXT_CLEARED;
     for (int i = 0; i < 3; i++) lv_label_set_text(pair_lines[i], lines[i]);
+    if (pwr && board_caps().pwr_hint) lv_label_set_text(pair_lines[1], board_caps().pwr_hint);
     lv_label_set_text(pair_lines[3], note);
     lv_obj_set_style_text_color(pair_lines[3], pair_hint == PAIR_HINT_NORMAL ? COL_DIM : COL_ACCENT, 0);
 }

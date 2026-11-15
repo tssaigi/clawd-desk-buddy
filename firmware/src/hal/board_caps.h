@@ -35,6 +35,10 @@ struct BoardCaps {
                              // button when button_count is 0) dismisses an
                              // active alert before it does anything else
                              // (director_button).
+    const char* pwr_hint;    // optional second line of the PWR pairing hint,
+                             // naming the board's PWR-role key ("hold B" on
+                             // the Core2, whose side key is a hard power-off).
+                             // nullptr keeps the default from ui_text.h.
 };
 
 const BoardCaps& board_caps(void);

@@ -72,3 +72,21 @@ const char*  director_beat_name(void);
 // running (lurk also needs the full-size sprite, i.e. PSRAM). `peek` is a tap
 // on the meters at x (default: three quarters across).
 bool director_debug(const char* beat);
+
+// Status mirror: what Claude is doing right now, from a host bridge (the
+// `status <state>` serial command). state = thinking | coding | reading |
+// searching | delegating | asking | done | idle. While updates keep coming
+// (within a minute of each other) he performs the matching official scene
+// full size, and the director's own shows stay off; idle sends him back to
+// his seat. A tap holds the meters for 15 s. Returns false for an unknown state.
+bool director_status(const char* state);
+
+// Gesture mode (touch boards with gestures.cpp): taps arrive through
+// director_tap on release instead of the raw press, the face rises only on
+// director_face_open (a swipe up on the meters), never as the screensaver,
+// and a tap on the meters just startles him off and back to his seat.
+void director_set_gesture_mode(bool on);
+// Swipe up on the meters: the face comes up (he ducks out first). Returns
+// false when it can't now (an alert, minimal mode, the face already up, or
+// a performance that first has to run home).
+bool director_face_open(int x);
