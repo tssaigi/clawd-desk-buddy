@@ -55,7 +55,8 @@ void boot_qr_show(void) {
     const int side = (w < h ? w : h);
     const int qr = side * 5 / 8;                     // 150 px on a 240 px panel
 
-    card = lv_obj_create(lv_layer_top());
+    // On the screen itself (not lv_layer_top), so the `screenshot` command captures it.
+    card = lv_obj_create(lv_screen_active());
     lv_obj_set_size(card, w, h);
     lv_obj_set_pos(card, 0, 0);
     lv_obj_set_style_bg_color(card, THEME_BG, 0);

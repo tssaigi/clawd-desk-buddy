@@ -11,6 +11,12 @@ Clawd sits on your desk, shows your Claude Code usage, and acts out what Claude 
 - **A printable Clawd body** for the Core2, in [`core2/enclosure`](core2/enclosure).
 - Silent. Nothing leaves your computer.
 
+| Startup QR | Sessions | Colony | Status mirror |
+|---|---|---|---|
+| ![The startup QR](core2/images/startup-qr.png) | ![Sessions page](core2/images/sessions-page.png) | ![Colony page](core2/images/colony-session.png) | ![Clawd coding](core2/images/status-coding.png) |
+
+Captured from a Core2 with sample session names.
+
 ## Set it up
 
 Got one of these as a gift, or flashing your own Core2? Open this repository with an AI coding
