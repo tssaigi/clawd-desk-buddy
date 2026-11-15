@@ -156,7 +156,8 @@ core2/bridge/pause.sh resume
 ```
 
 The device answers `{"bootqr":false,"available":true}`. `bootqr on` brings it back,
-`bootqr show` shows it once, right now.
+`bootqr show` shows it once, right now. (The device restarts once when the command tool opens
+the serial port. That is normal.)
 
 **For good, at build time:** in `firmware/platformio.ini`, in the `[env:m5stack_core2]` block,
 delete the two lines `-DLV_USE_QRCODE=1` and `-DCLAWD_REPO_URL=...` (or add `-DCLAWD_BOOT_QR=0`),

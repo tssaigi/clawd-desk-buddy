@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Send serial commands to the Core2 and print its replies, without resetting it.
+"""Send serial commands to the Core2 and print its replies.
+
+Opening the serial port restarts the Core2 (its USB chip toggles the reset
+line), so this waits for it to start before sending.
 
     python3 send_cmd.py info
     python3 send_cmd.py "bootqr off"
@@ -30,10 +33,10 @@ def main():
     cmds = sys.argv[1:] or ["info"]
     s = serial.Serial()
     s.port, s.baudrate, s.timeout = find_port(), 115200, 0.2
-    s.dtr = False          # keep the reset line quiet: the device must not restart
+    s.dtr = False
     s.rts = False
     s.open()
-    time.sleep(0.3)
+    time.sleep(2.5)        # the port open restarts the device: let it boot
     s.reset_input_buffer()
     for c in cmds:
         s.write((c + "\n").encode())
