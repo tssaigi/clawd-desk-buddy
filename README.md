@@ -1,8 +1,8 @@
 # Clawd desk buddy (M5Stack Core2)
 
-[![Setup and tour: the four setup steps, then every screen and how to get there](core2/video/setup.gif)](core2/video/clawd-desk-buddy-setup.mp4)
+![Setup and tour: the four setup steps, then every screen and how to get there](core2/video/setup.gif)
 
-**Setup and tour, 2 minutes.** It plays here without sound. [Watch or download the full-quality video (MP4)](core2/video/clawd-desk-buddy-setup.mp4).
+**Setup and tour, 2 minutes.** It plays here, without sound. [Download the full-quality video (MP4, 9 MB)](https://github.com/tssaigi/clawd-desk-buddy/raw/core2/core2/video/clawd-desk-buddy-setup.mp4).
 
 A fork of [Clawdmeter](https://github.com/HermannBjorgvin/Clawdmeter) for the **M5Stack Core2**.
 Clawd sits on your desk, shows your Claude Code usage, and acts out what Claude is doing right now.
